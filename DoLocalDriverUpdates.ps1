@@ -1,51 +1,49 @@
-﻿if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
- if ([int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber) -ge 6000) {
-  $CommandLine = "-File `"" + $MyInvocation.MyCommand.Path + "`" " + $MyInvocation.UnboundArguments
-  Start-Process -FilePath PowerShell.exe -Verb Runas -ArgumentList $CommandLine
-  Exit
- }
+﻿# DoLocalDriverUpdates.ps1
+
+# If not running as Administrator, escalate self
+if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
+    if ([int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber) -ge 6000) {
+        $CommandLine = "-File `"" + $MyInvocation.MyCommand.Path + "`" " + $MyInvocation.UnboundArguments
+        Start-Process -FilePath PowerShell.exe -Verb Runas -ArgumentList $CommandLine
+        Exit
+    }
 }
 
+
+
 Add-Type -AssemblyName System.Windows.Forms
-$Form = New-Object system.Windows.Forms.Form
+$Form = New-Object System.Windows.Forms.Form
 $Form.Text = "Dell Driver Updates"
+$Form.BackColor = "DarkGray"
 $Form.AutoSize = $True
 
-
 $Note = New-Object System.Windows.Forms.Label
-
 $Note.Text = "Status Updates"
-
 $Note.AutoSize = $True
+
 $Form.Controls.Add($Note)
 
 $Note.Text = "Check the updates you want to install"
-
-$System_Drawing_Point = New-Object System.Drawing.Point
-
-
 
 $btn_Scan = New-Object system.windows.Forms.Button 
 $btn_Scan.Text = "Scan for Updates" 
 $btn_Scan.BackColor = "Yellow" 
 $btn_Scan.Width = 249 
 $btn_Scan.Height = 30 
+$btn_Scan.Dock = "Bottom"
+
+$System_Drawing_Point = New-Object System.Drawing.Point
 $System_Drawing_Point.Y = 25
 
 $btn_Scan.Location = $System_Drawing_Point
+
 $Form.Controls.Add($btn_Scan)
 $btn_Scan.Add_Click({checkUpdates})
 
-
-$processlog = "c:\updates\DellDrivers\process.log"
+$processlog = $PSScriptRoot + "\DellDrivers\process.log"
 New-Item -ItemType "file" -Path $processlog -Force
 
-$xmlcatalog = "c:\updates\DellDrivers\driverUpdates.xml"
-
-
-
-
-
+$xmlcatalog = $PSScriptRoot + "\DellDrivers\driverUpdates.xml"
 
 function DownloadWithRetry([string] $url, [string] $downloadLocation, [int] $retries)
 {
@@ -68,7 +66,6 @@ function DownloadWithRetry([string] $url, [string] $downloadLocation, [int] $ret
                 Write-Host "Waiting 10 seconds before retrying. Retries left: $retries"
                 $Note.Text = "Waiting 10 seconds.  Retries left: $retries"
                 Start-Sleep -Seconds 10
- 
             }
             else
             {
@@ -80,45 +77,50 @@ function DownloadWithRetry([string] $url, [string] $downloadLocation, [int] $ret
     }
 }
 
-
  Function runUpdates () {
     $Form.Controls.Remove($btn_Execute)
     $Note.Text = "Preparing for updates"
-    $downloadLocation = "C:\Updates\DellDrivers\"
-    md -Path $downloadLocation -Force
-    New-Item -ItemType "file" -Path "c:\updates\delldrivers\install.bat" -Force
+    $downloadLocation = $PSScriptRoot + "\DellDrivers\"
+    mkdir -Path $downloadLocation -Force
+    $installScript = $downloadLocation + "install.bat"
+    New-Item -ItemType "file" -Path $installScript -Force
     $Note.Text = "Starting downloads"
     foreach($update in $Checkboxes)
     {
         if($update.Checked)
         {
-            
             $downloadFile = $update.AccessibleName -Split "/"
             $downloadFile = $downloadFile[$downloadFile.length-1]
             DownloadWithRetry -url $update.AccessibleName -downloadLocation "$downloadLocation$downloadFile" -retries 5
-            Add-Content C:\updates\dellDrivers\install.bat "start /wait $downloadLocation$downloadFile /s /l=`"C:\softwareLogs\$downloadFile.log`""
-            
+            Add-Content $installScript "start /wait $downloadLocation$downloadFile /s /l=`"$PSScriptRoot\$downloadFile.log`""
         }
     }
+    
     $Note.Text = "Done with downloads"
     $Note.Text = "Installing updates"
-    start c:\updates\delldrivers\install.bat -Wait -NoNewWindow
+    Start-Process $installScript -Wait -NoNewWindow
     $Note.Text = "Installation Finished.  You can close this window"
-    
 }
-Function checkUpdates() {
 
+Function checkUpdates() {
     New-Item -ItemType "file" -Path $xmlcatalog -Force
-    $dcucli = "\\YOUR\PATH\TO\DCU-CLI\dcu-cli.exe"
+    $dcucli = $PSScriptRoot + "\dcu-cli.exe"
     $Note.Text = "Checking System for Updates.  Please wait..."
-    start-process -Wait -FilePath $dcucli -ArgumentList "/report $xmlcatalog" -WindowStyle hidden
+    Start-Process -Wait -FilePath $dcucli -ArgumentList "/report $xmlcatalog" -WindowStyle hidden
     $Note.Text = "Dell Command Update Client Finished"
     displayUpdates
-    
 }
+
 Function displayUpdates() {
     $Note.Text = "Processing update catalog file"
     [xml]$XmlDocument = Get-Content $xmlcatalog
+
+    if($XmlDocument.Count -lt 1)
+    {
+        $Note.Text = "No updates found"
+        Return 1
+    }
+
     $XmlDocument.GetType().FullName
     
     $CheckBoxCounter = 1
@@ -148,18 +150,23 @@ Function displayUpdates() {
         $CheckBox
         $CheckBoxCounter++
     }
+
     $Note.Text = "Put a check next to the updates you want to install"
+    
     $btn_Execute = New-Object system.windows.Forms.Button 
     $btn_Execute.Text = "Install Updates" 
-    $btn_Execute.BackColor = "Yellow" 
+    $btn_Execute.BackColor = "Green" 
     $btn_Execute.Width = 249 
     $btn_Execute.Height = 30 
+
     $System_Drawing_Point.Y = 25
     $btn_Execute.Location = $System_Drawing_Point
+    
     $Form.Controls.Remove($btn_Scan)
     $Form.Controls.Add($btn_Execute)
     $btn_Execute.Add_Click({runUpdates})
 }
+
 
 
 $Form.ShowDialog()
