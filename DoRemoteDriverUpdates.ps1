@@ -26,6 +26,6 @@ foreach($label in $XmlDocument.updates.update) {
 }
 
 Add-Content $processlog "Downloading all updates found"
-DownloadUpdates $urlist $downloadLocation
+DownloadUpdates $urlist
 
 InstallUpdates

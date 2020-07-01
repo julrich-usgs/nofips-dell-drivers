@@ -19,52 +19,51 @@ Function LogNote([string] $message){
 }
 
 # Download the file specified by url to the download location, can retry
-function DownloadWithRetry([string] $url, [string] $downloadLocation, [int] $retries)
+function DownloadWithRetry([string] $url, [string] $outFile, [int] $retries)
 {
     while($true)
     {
         try
         {
-            LogNote "Attempting download $url"
-            Invoke-WebRequest $url -OutFile $downloadLocation -UseBasicParsing
-            LogNote "Download succeeded"
+            Invoke-WebRequest $url -OutFile $outFile -UseBasicParsing
+            Write-Verbose "Download succeeded"
             break
         }
         catch
         {
             $exceptionMessage = $_.Exception.Message
-            LogNote "Failed to download '$url': $exceptionMessage"
+            Write-Verbose "Failed to download '$url': $exceptionMessage"
             if ($retries -gt 0) {
                 $retries--
-                LogNote "Waiting 10 seconds before retrying. Retries left: $retries"
+                Write-Verbose "Waiting 10 seconds before retrying. Retries left: $retries"
                 Start-Sleep -Seconds 10
             }
             else
             {
-                LogNote "Max retries reached download failed $url"
-                $exception = $_.Exception
-                throw $exception
+                Write-Verbose "Max retries reached download failed $url"
+                throw $_.Exception
             }
         }
     }
 }
 
 # Downloads all the update files and makes the Installation Script
-Function DownloadUpdates($urlist, [string] $downloadLocation){
+Function DownloadUpdates($urlist){
     New-Item -ItemType "file" -Path $installScript -Force
 
     ForEach($url in $urlist) {
         $downloadFile = $url -Split "/"
         $downloadFile = $downloadFile[$downloadFile.length - 1]
-        
-        # TODO: I can't get this to work as a background task
-        #Start-Job -ScriptBlock ${Function:DownloadWithRetry} -ArgumentList "-url $update.AccessibleName", "-downloadLocation `"$downloadLocation$downloadFile`"", "-retries 5"
+        $filePath = $downloadLocation + $downloadFile
 
-        DownloadWithRetry -url $url -downloadLocation "$downloadLocation$downloadFile" -retries 5
-        Add-Content $installScript "Start-Process -Wait -FilePath `"$downloadLocation$downloadFile`" -ArgumentList `"/s`", `"/l=```"$downloadLocation$downloadFile.log```"`""
+        LogNote "Attempting download $url"
+        Start-Job -ScriptBlock ${function:DownloadWithRetry} -ArgumentList $url, $filePath, 5
+
+        #DownloadWithRetry -url $url -outFile "$downloadLocation$downloadFile" -retries 5
+        Add-Content $installScript "Start-Process -Wait -FilePath `"$filePath`" -ArgumentList `"/s`", `"/l=```"$filePath.log```"`""
     }
 
-    #SpinWait
+    SpinWait
 }
 
 # Runs the install script as background job
@@ -112,6 +111,8 @@ function SpinWait() {
         if ($spinStep -gt $spinner.Length - 1) {$spinStep = 0}
     }
 
-    Remove-Job -State Completed 
+    # Clean up
+    Remove-Job -State Completed
+    Remove-Job -State Failed
     [System.Windows.Forms.Application]::UseWaitCursor=$false
 }

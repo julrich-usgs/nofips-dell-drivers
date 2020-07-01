@@ -78,7 +78,7 @@ Function Execute_Click () {
         }
     }
 
-    DownloadUpdates $urlist $downloadLocation
+    DownloadUpdates $urlist
 
     LogNote "Done with downloads"
 
