@@ -1,5 +1,7 @@
 # DownloadTest.ps1
 #
+#   Unit test of the DownloadUpdates function. Used to prove out multithreaded downloads.
+#
 # Include shared functions
 . $PSScriptRoot\DellUpdateFunctions.ps1
 

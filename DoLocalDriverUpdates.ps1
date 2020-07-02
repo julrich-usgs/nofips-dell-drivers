@@ -3,13 +3,12 @@
 # Include shared functions
 . $PSScriptRoot\DellUpdateFunctions.ps1
 
+
+
 # If not running as Administrator, escalate self
-if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
-    if ([int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber) -ge 6000) {
-        $CommandLine = "-File `"" + $MyInvocation.MyCommand.Path + "`" " + $MyInvocation.UnboundArguments
-        Start-Process -FilePath PowerShell.exe -Verb Runas -ArgumentList $CommandLine
-        Exit
-    }
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Start-Process PowerShell -Verb RunAs "-NoProfile -ExecutionPolicy Bypass -Command `"cd '$pwd'; & '$PSCommandPath';`""
+    Exit
 }
 
 # GUI Button to check for updates
@@ -84,7 +83,6 @@ Function Execute_Click () {
 
     InstallUpdates
 
-    LogNote "Installation Finished! Reboot may be required."
     $Form.Controls["btnInstall"].Enabled = $true
 }
 
@@ -102,6 +100,7 @@ $Note = New-Object System.Windows.Forms.Label
 $Note.Name = "StatusText"
 $Note.Text = "Click button to check for updates"
 $Note.AutoSize = $True
+$Note.Padding = [System.Windows.Forms.Padding]::new(11)
 $Note.MaximumSize = [System.Drawing.Size]::new($Form.Width, 0)
 $Form.Controls.Add($Note)
 
@@ -118,5 +117,3 @@ $Form.Controls.Add($btn_Scan)
 
 # Show that GUI
 $Form.ShowDialog($this)
-
-Remove-Variable Form
