@@ -1,2 +1,6 @@
 # nofips-dell-drivers
-Use powershell and Dell Command Update cli to make Dell Command update work with FIPS enabled
+PowerShell scripts that leverage **dcu-cli.exe** to make Dell Command Update work with FIPS enabled systems.
+
+## Usage
+  - Run **DoLocalDriverUpdates.ps1** to run an Interactive GUI
+  - Run **DoRemoteDriverUpdates.ps1** to download and instsall all available updates automatically
