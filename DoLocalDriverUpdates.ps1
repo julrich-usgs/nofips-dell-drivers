@@ -1,165 +1,119 @@
-﻿if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
- if ([int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber) -ge 6000) {
-  $CommandLine = "-File `"" + $MyInvocation.MyCommand.Path + "`" " + $MyInvocation.UnboundArguments
-  Start-Process -FilePath PowerShell.exe -Verb Runas -ArgumentList $CommandLine
-  Exit
- }
+﻿# DoLocalDriverUpdates.ps1
+#
+# Include shared functions
+. $PSScriptRoot\DellUpdateFunctions.ps1
+
+
+
+# If not running as Administrator, escalate self
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Start-Process PowerShell -Verb RunAs "-NoProfile -ExecutionPolicy Bypass -Command `"cd '$pwd'; & '$PSCommandPath';`""
+    Exit
 }
 
-Add-Type -AssemblyName System.Windows.Forms
-$Form = New-Object system.Windows.Forms.Form
-$Form.Text = "Dell Driver Updates"
-$Form.AutoSize = $True
+# GUI Button to check for updates
+Function Scan_Click() {
+    $btn_Scan.Enabled = $false
+    CheckForUpdates
+    $btn_Scan.Enabled = $true
 
+    If ((Get-Item $xmlcatalog).length -gt 0kb) {
+        LogNote "Processing update catalog file"
+        DisplayUpdates
+    } Else {
+        LogNote "No updates found"
+        Return 1
+    }
+}
+
+# Add checkboxen to GUI with update list
+Function DisplayUpdates() {
+    $Form.Controls.Remove($btn_Scan)
+    [xml]$XmlDocument = Get-Content $xmlcatalog
+    
+    $CheckBoxCounter = 1
+    $global:Checkboxes = foreach($Label in $XmlDocument.updates.update) {
+        $CheckBox = New-Object System.Windows.Forms.CheckBox
+        $CheckBox.UseVisualStyleBackColor = $True
+        $CheckBox.Size = [System.Drawing.Size]::new(800, 34)
+        $CheckBox.TabIndex = 2
+        $CheckBox.Text = $Label.name +" - "+ $Label.version +" - "+ $Label.date +" - "+ $Label.urgency
+        $CheckBox.AccessibleName = "https://"+$Label.file 
+        $CheckBox.Checked = $true
+        $CheckBox.Location = [System.Drawing.Point]::new(27, 60 + (($CheckBoxCounter - 1) * 31))
+        $CheckBox.DataBindings.DefaultDataSourceUpdateMode = 0
+        $CheckBox.Name = "CheckBox$CheckBoxCounter"
+        $Form.Controls.Add($CheckBox)
+        $CheckBox
+        $CheckBoxCounter++
+    }
+
+    LogNote "Put a check next to the updates you want to install:"
+    
+    $btn_Execute = New-Object System.Windows.Forms.Button
+    $btn_Execute.Name = "btnInstall"
+    $btn_Execute.Text = "Install Updates" 
+    $btn_Execute.BackColor = "Green" 
+    $btn_Execute.Width = 249 
+    $btn_Execute.Height = 30 
+    $btn_Execute.Location = [System.Drawing.Point]::new(0,25)
+    $btn_Execute.Dock = "Bottom"
+    $btn_Execute.Add_Click({Execute_Click})
+    $Form.Controls.Add($btn_Execute)
+}
+
+# GUI Button "btnInstall"
+Function Execute_Click () {
+    $Form.Controls["btnInstall"].Enabled = $false
+    
+    LogNote "Starting downloads"
+    $urlist = [System.Collections.ArrayList]::new()
+    foreach ($update in $global:Checkboxes)
+    {
+        if($update.Checked)
+        {
+            $urlist.Add($update.AccessibleName)
+            $Form.Controls.Remove($update)
+        }
+    }
+
+    DownloadUpdates $urlist
+
+    LogNote "Done with downloads"
+
+    InstallUpdates
+
+    $Form.Controls["btnInstall"].Enabled = $true
+}
+
+# Create a GUI
+$Global:gui = $True
+Add-Type -AssemblyName System.Windows.Forms
+$Form = New-Object System.Windows.Forms.Form
+$Form.Text = "Dell Command Update"
+$Form.BackColor = "DarkGray"
+$Form.AutoSize = $True
+$Form.Width = 800
+$Form.StartPosition = "CenterScreen"
 
 $Note = New-Object System.Windows.Forms.Label
-
-$Note.Text = "Status Updates"
-
+$Note.Name = "StatusText"
+$Note.Text = "Click button to check for updates"
 $Note.AutoSize = $True
+$Note.Padding = [System.Windows.Forms.Padding]::new(11)
+$Note.MaximumSize = [System.Drawing.Size]::new($Form.Width, 0)
 $Form.Controls.Add($Note)
-
-$Note.Text = "Check the updates you want to install"
-
-$System_Drawing_Point = New-Object System.Drawing.Point
-
-
 
 $btn_Scan = New-Object system.windows.Forms.Button 
 $btn_Scan.Text = "Scan for Updates" 
 $btn_Scan.BackColor = "Yellow" 
 $btn_Scan.Width = 249 
 $btn_Scan.Height = 30 
-$System_Drawing_Point.Y = 25
-
-$btn_Scan.Location = $System_Drawing_Point
+$btn_Scan.Dock = "Bottom"
+$btn_Scan.Location = [System.Drawing.Point]::new(25,25)
+$btn_Scan.Add_Click({Scan_Click})
+$btn_Scan.Enabled = $true
 $Form.Controls.Add($btn_Scan)
-$btn_Scan.Add_Click({checkUpdates})
 
-
-$processlog = "c:\updates\DellDrivers\process.log"
-New-Item -ItemType "file" -Path $processlog -Force
-
-$xmlcatalog = "c:\updates\DellDrivers\driverUpdates.xml"
-
-
-
-
-
-
-function DownloadWithRetry([string] $url, [string] $downloadLocation, [int] $retries)
-{
-    while($true)
-    {
-        try
-        {
-            $Note.Text = "attempting download $url"
-            Invoke-WebRequest $url -OutFile $downloadLocation -UseBasicParsing
-            $Note.Text = "download succeeded"
-            break
-        }
-        catch
-        {
-            $exceptionMessage = $_.Exception.Message
-            Write-Host "Failed to download '$url': $exceptionMessage"
-            $Note.Text = "download failed"
-            if ($retries -gt 0) {
-                $retries--
-                Write-Host "Waiting 10 seconds before retrying. Retries left: $retries"
-                $Note.Text = "Waiting 10 seconds.  Retries left: $retries"
-                Start-Sleep -Seconds 10
- 
-            }
-            else
-            {
-                $Note.Text = "Max retries reached download failed $url"
-                $exception = $_.Exception
-                throw $exception
-            }
-        }
-    }
-}
-
-
- Function runUpdates () {
-    $Form.Controls.Remove($btn_Execute)
-    $Note.Text = "Preparing for updates"
-    $downloadLocation = "C:\Updates\DellDrivers\"
-    md -Path $downloadLocation -Force
-    New-Item -ItemType "file" -Path "c:\updates\delldrivers\install.bat" -Force
-    $Note.Text = "Starting downloads"
-    foreach($update in $Checkboxes)
-    {
-        if($update.Checked)
-        {
-            
-            $downloadFile = $update.AccessibleName -Split "/"
-            $downloadFile = $downloadFile[$downloadFile.length-1]
-            DownloadWithRetry -url $update.AccessibleName -downloadLocation "$downloadLocation$downloadFile" -retries 5
-            Add-Content C:\updates\dellDrivers\install.bat "start /wait $downloadLocation$downloadFile /s /l=`"C:\softwareLogs\$downloadFile.log`""
-            
-        }
-    }
-    $Note.Text = "Done with downloads"
-    $Note.Text = "Installing updates"
-    start c:\updates\delldrivers\install.bat -Wait -NoNewWindow
-    $Note.Text = "Installation Finished.  You can close this window"
-    
-}
-Function checkUpdates() {
-
-    New-Item -ItemType "file" -Path $xmlcatalog -Force
-    $dcucli = "\\YOUR\PATH\TO\DCU-CLI\dcu-cli.exe"
-    $Note.Text = "Checking System for Updates.  Please wait..."
-    start-process -Wait -FilePath $dcucli -ArgumentList "/report $xmlcatalog" -WindowStyle hidden
-    $Note.Text = "Dell Command Update Client Finished"
-    displayUpdates
-    
-}
-Function displayUpdates() {
-    $Note.Text = "Processing update catalog file"
-    [xml]$XmlDocument = Get-Content $xmlcatalog
-    $XmlDocument.GetType().FullName
-    
-    $CheckBoxCounter = 1
-    
-    $global:CheckBoxes = foreach($Label in $XmlDocument.updates.update) {
-        $CheckBox = New-Object System.Windows.Forms.CheckBox        
-        $CheckBox.UseVisualStyleBackColor = $True
-        $System_Drawing_Size = New-Object System.Drawing.Size
-        $System_Drawing_Size.Width = 800
-        $System_Drawing_Size.Height = 34
-        $CheckBox.Size = $System_Drawing_Size
-        $CheckBox.TabIndex = 2
-
-        $CheckBox.Text = $Label.name +" - "+ $Label.version +" - "+ $Label.date +" - "+ $Label.urgency
-        $CheckBox.AccessibleName = "https://"+$Label.file 
-        $CheckBox.Checked = $true
-
-        $System_Drawing_Point = New-Object System.Drawing.Point
-        $System_Drawing_Point.X = 27
-        $System_Drawing_Point.Y = 60 + (($CheckBoxCounter - 1) * 31)
-        $CheckBox.Location = $System_Drawing_Point
-        $CheckBox.DataBindings.DefaultDataSourceUpdateMode = 0
-
-        $CheckBox.Name = "CheckBox$CheckBoxCounter"
-
-        $Form.Controls.Add($CheckBox)
-        $CheckBox
-        $CheckBoxCounter++
-    }
-    $Note.Text = "Put a check next to the updates you want to install"
-    $btn_Execute = New-Object system.windows.Forms.Button 
-    $btn_Execute.Text = "Install Updates" 
-    $btn_Execute.BackColor = "Yellow" 
-    $btn_Execute.Width = 249 
-    $btn_Execute.Height = 30 
-    $System_Drawing_Point.Y = 25
-    $btn_Execute.Location = $System_Drawing_Point
-    $Form.Controls.Remove($btn_Scan)
-    $Form.Controls.Add($btn_Execute)
-    $btn_Execute.Add_Click({runUpdates})
-}
-
-
-$Form.ShowDialog()
+# Show that GUI
+$Form.ShowDialog($this)
