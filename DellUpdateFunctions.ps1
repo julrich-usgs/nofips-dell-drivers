@@ -100,7 +100,7 @@ Function InstallUpdates(){
 }
 
 # SpinWait prevents GUI lockup due to running Powershell commands on a WinForms thread
-function SpinWait() {
+Function SpinWait() {
     [System.Windows.Forms.Application]::UseWaitCursor=$true
     if ($global:gui){$oldNote = $Note.Text}
     $spinner = ".oO@+-\|/-"
@@ -122,4 +122,15 @@ function SpinWait() {
     Remove-Job -State Completed
     Remove-Job -State Failed
     [System.Windows.Forms.Application]::UseWaitCursor=$false
+}
+
+Function BitLockedDrives(){
+    Return Get-BitLockerVolume | Where-Object {$_.ProtectionStatus -eq "On"}
+}
+
+Function SuspendAllBitlocker(){
+    BitLockedDrives | ForEach-Object {
+        LogNote "Suspending BitLocker for $_" 
+        Suspend-BitLocker -MountPoint $_ -RebootCount 1
+    }
 }
