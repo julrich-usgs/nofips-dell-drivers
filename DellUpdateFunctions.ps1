@@ -3,11 +3,11 @@
 #   Required module for nofips-dell-drivers. Does nothing by itself.
 #
 # Shared Variables:
-$downloadLocation = $PSScriptRoot + "\DellDrivers\"
-$processlog = $downloadLocation + "process.log"
-$installScript = $downloadLocation + "install.ps1"
-$xmlcatalog = $downloadLocation + "driverUpdates.xml"
-$dcucli = $PSScriptRoot + "\dcu-cli.exe"
+[string]$downloadLocation = $PSScriptRoot + "\DellDrivers\"
+[string]$processlog = $downloadLocation + "process.log"
+[string]$installScript = $downloadLocation + "install.ps1"
+[string]$xmlcatalog = $downloadLocation + "driverUpdates.xml"
+[string]$dcucli = $PSScriptRoot + "\dcu-cli.exe"
 [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") 
 
 
