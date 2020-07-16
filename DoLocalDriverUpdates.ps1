@@ -37,9 +37,9 @@ Function DisplayUpdates() {
         $CheckBox.UseVisualStyleBackColor = $True
         $CheckBox.Size = [System.Drawing.Size]::new(800, 34)
         $CheckBox.TabIndex = 2
-        $CheckBox.Text = $update.name +" - "+ $update.version +" - "+ $update.date +" - "+ $update.urgency +" - "+ $update.type
+        $CheckBox.Text = $update.name +" - "+ $update.version +" - "+ $update.date +" - "+ $update.urgency +" - "+ $update.category
         $CheckBox.AccessibleName = "https://"+$update.file
-        $CheckBox.Tag = $update.type
+        $CheckBox.Tag = $update.category
         $CheckBox.Checked = $true
         $CheckBox.Location = [System.Drawing.Point]::new(27, 60 + (($CheckBoxCounter - 1) * 31))
         $CheckBox.DataBindings.DefaultDataSourceUpdateMode = 0
