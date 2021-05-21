@@ -22,10 +22,14 @@ If ((Get-Item $xmlcatalog).length -gt 0kb) {
 # Make URLs from each update in XML file
 $updateNum = 0
 $urlist = [System.Collections.ArrayList]::new()
-foreach($label in $XmlDocument.updates.update) {
-    $urlist.Add("https://"+$label.file)
-    Add-Content $processlog "Found Update: $urlist[$updateNum]" 
+foreach($update in $XmlDocument.updates.update) {
+    $urlist.Add("https://"+$update.file)
+    Add-Content $processlog "Found Update: $urlist[$updateNum]"
     $updateNum++
+
+    if($update.type -like "*bios*" -or $update.category -like "*bios*" -or $update.name -like "*thunderbolt*"){
+        SuspendAllBitlocker
+    }
 }
 
 Add-Content $processlog "Downloading all updates found"

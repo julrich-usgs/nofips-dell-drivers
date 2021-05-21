@@ -32,13 +32,14 @@ Function DisplayUpdates() {
     [xml]$XmlDocument = Get-Content $xmlcatalog
     
     $CheckBoxCounter = 1
-    $global:Checkboxes = foreach($Label in $XmlDocument.updates.update) {
+    $global:Checkboxes = foreach($update in $XmlDocument.updates.update) {
         $CheckBox = New-Object System.Windows.Forms.CheckBox
         $CheckBox.UseVisualStyleBackColor = $True
         $CheckBox.Size = [System.Drawing.Size]::new(800, 34)
         $CheckBox.TabIndex = 2
-        $CheckBox.Text = $Label.name +" - "+ $Label.version +" - "+ $Label.date +" - "+ $Label.urgency
-        $CheckBox.AccessibleName = "https://"+$Label.file 
+        $CheckBox.Text = $update.name +" - "+ $update.version +" - "+ $update.date +" - "+ $update.urgency +" - "+ $update.category
+        $CheckBox.AccessibleName = "https://"+$update.file
+        $CheckBox.Tag = $update.category
         $CheckBox.Checked = $true
         $CheckBox.Location = [System.Drawing.Point]::new(27, 60 + (($CheckBoxCounter - 1) * 31))
         $CheckBox.DataBindings.DefaultDataSourceUpdateMode = 0
@@ -72,6 +73,10 @@ Function Execute_Click () {
     {
         if($update.Checked)
         {
+            if ($update.Tag -like "*bios*" -or $update.name -like "*thunderbolt*"){
+                SuspendAllBitlocker
+            } 
+
             $urlist.Add($update.AccessibleName)
             $Form.Controls.Remove($update)
         }
